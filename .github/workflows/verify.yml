@@ -32,7 +32,10 @@ jobs:
       - run: npm test
       - run: npx playwright install chromium
       - run: npm run test:e2e
-      - run: node scripts/build-runtime-artifact.mjs
+      - name: Build and smoke-test the standalone artifact
+        run: |
+          node scripts/build-runtime-artifact.mjs "$RUNNER_TEMP/koonpinai-runtime"
+          node scripts/check-auth-production.mjs "$RUNNER_TEMP/koonpinai-runtime/artifact"
       - run: git diff --check
   containers:
     runs-on: ubuntu-24.04

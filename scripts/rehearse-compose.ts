@@ -12,6 +12,7 @@ import {encode} from 'next-auth/jwt';
 import {osEnvironment} from '../runtime/secrets.mjs';
 import {assertLocalDocker,assertOwnedProject,assertFixtureRoot,createStagingFixture,composeEnvironment,sourcePin} from './staging/fixture';
 import {releaseConfig,validateImage,verifyReleaseFiles} from './release-images';
+import {verifyProductionHttp} from './check-auth-production.mjs';
 import {assertPrivatePath} from './portable/permissions';
 import {outside} from './portable/crypto';
 
@@ -99,6 +100,8 @@ async function main(){
  await compose(source,['up','--detach','web']);let web=await waitHealthy(source,'web');assert.equal(web.Config.User,'1001:1001');assert.equal(web.HostConfig.Memory,1024**3);assert.equal(web.HostConfig.NanoCpus,1e9);assert.equal(web.HostConfig.PidsLimit,128);assert.equal(web.HostConfig.ReadonlyRootfs,true);
  const mounts=web.Mounts.filter((m:{Type:string})=>m.Type==='bind');assert.equal(mounts.length,1);assert.equal(mounts[0].Destination,'/run/secrets');assert.equal(mounts[0].RW,false);
  const binding=web.NetworkSettings.Ports['3000/tcp'];assert.equal(binding.length,1);assert.equal(binding[0].HostIp,'127.0.0.1');let port=Number(binding[0].HostPort);
+ await verifyProductionHttp(port,{assets:true});
+ checks.push('Managed HTTP behind forwarded HTTPS headers: redirects, Auth.js responses, cookies, gzip framing, static assets and image optimization pass');
  const cookie=await encode({secret:source.secrets.auth,salt:'__Secure-authjs.session-token',maxAge:3600,token:{userId:source.members[0],sid:source.sessions[0],oidcIssuer:'https://sso.kmitl.ac.th/realms/kmitl',oidcSubject:source.marker+'-0',deadline:Math.floor(Date.now()/1000)+3600}});
  assert.equal((await http(port,'/login')).status,200);assert.equal((await http(port,'/')).status,307);const own=await http(port,'/my-timetable',cookie);assert.equal(own.status,200);assert.ok(own.body.includes('Synthetic Algorithms'));checks.push('Actual Compose web image starts as nonroot, private mounts/resource limits and synthetic authenticated timetable rendering pass');
  // A failed candidate has no published port and only its own runtime mount.

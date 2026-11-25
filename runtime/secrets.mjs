@@ -2,7 +2,7 @@ import { readFileSync, lstatSync, realpathSync, existsSync, readdirSync } from '
 import { resolve, relative, isAbsolute, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-export const NEXT_VERSION = '16.4.2';
+export const NEXT_VERSION = '16.4.6';
 const deny = message => { throw new Error(message); };
 /** @param {Record<string,string|undefined>} source */
 export function assertNoInheritedCredentials(source=process.env){
