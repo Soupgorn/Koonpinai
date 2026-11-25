@@ -11,6 +11,7 @@ import {encode} from 'next-auth/jwt';
 import {assertLocalCanaryTarget,ISOLATED_MARKER} from './phase3-canary';
 import {loadRuntimeEnvironment,validateRuntimeUrl,osEnvironment} from '../runtime/secrets.mjs';
 import {observeRuntimeSessions,readRuntimeSessions,rehearseSessionOwnership} from './runtime-session-observer';
+import {verifyProductionHttp} from './check-auth-production.mjs';
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 type Options={owner:Pool;config:PoolConfig;url:string;caFile:string;root:string;secretRoot:string;artifact:string;rollbackArtifact:string;selfHosted?:boolean};
 export async function rehearseRuntime(o:Options){
@@ -100,11 +101,11 @@ export async function rehearseRuntime(o:Options){
     const candidateSessions=await observeRuntimeSessions(()=>readRuntimeSessions(o.owner));
     const candidate=await start(o.artifact,env);
     await candidateSessions.capture();
-    assert.equal((await http(3331,'/ready')).status,200);assert.equal((await http(3330,'/login')).status,200);
-    assert.equal((await http(3330,'/')).status,307);
+    assert.equal((await http(3331,'/live')).status,200);
+    assert.equal((await http(3331,'/ready')).status,200);
+    await verifyProductionHttp(3330,{assets:true});
     const gated=await http(3330,'/',true);assertPolicyGate(gated);
-    const provider=await http(3330,'/api/auth/providers');assert.equal(provider.status,200);assert.ok(provider.body.includes('https://app.example/api/auth/callback/keycloak'));
-    checks.push('Real Next artifact: startup identity/TLS readiness, login, private redirects, canonical callback, old consent requires renewal');
+    checks.push('Real Next artifact: liveness, TLS readiness, production HTTP smoke and old consent requires renewal');
     const bad={...environment(o.artifact,3340,3341),DATABASE_URL:o.url.replace(encodeURIComponent(String(o.config.password)),'public-wrong-fixture-password')};
     const failed=await start(o.artifact,bad,false);assert.equal(failed.rejectionCode,'28P01');assert.equal((await http(3330,'/login')).status,200);
     checks.push('Failed candidate authentication never opens traffic; previous healthy process remains available');

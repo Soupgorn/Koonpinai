@@ -12,7 +12,7 @@ October 23: retained functional rehearsals remain PASS. After the owner's connec
 
 ## Services and version pins
 
-`operations/selfhost/compose.yaml` separates the web service, PostgreSQL and opt-in operator tools. PostgreSQL is **17.11**, matching the inspected source major/version, pinned to `postgres:17.11-bookworm@sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27`. The Node base is digest-pinned in both Dockerfiles. `npm ci` uses the committed lockfile; the managed launcher requires Next **16.4.2**. Review pins together before upgrading.
+`operations/selfhost/compose.yaml` separates the web service, PostgreSQL and opt-in operator tools. PostgreSQL is **17.11**, matching the inspected source major/version, pinned to `postgres:17.11-bookworm@sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27`. The Node 24 base is digest-pinned in both Dockerfiles. The managed runtime and release tools use the reviewed Next.js **16.4.6** pin in `runtime/secrets.mjs`. Review that pin alongside the dependency manifest and lockfile before upgrading.
 
 | Service | Access and lifecycle | Initial limits |
 | --- | --- | --- |
@@ -59,7 +59,23 @@ No real secret belongs in this repository, Docker build context, image, Compose 
 
 Use a secret manager or protected file editor/stdin-based provisioning on the target machine, with shell tracing disabled. Do not paste URLs/passwords into commands. A root operator controls initial host ownership, mounts and secrets. UID/group assumptions must be validated on the actual Linux host; Docker-daemon administrators are trusted operators, not an isolation boundary.
 
+### Managed deployment configuration checklist
+
+- Set the manifest `authUrl` to the canonical HTTPS origin, for example `https://<staging-host>/`. The launcher derives `AUTH_URL` from it. Register the exact callback `https://<staging-host>/api/auth/callback/keycloak` with the approved KMITL client and keep the OIDC client secret in the external runtime mount.
+- Terminate TLS at the approved proxy and forward the canonical `Host`, `X-Forwarded-Host` and `X-Forwarded-Proto`. Confirm the certificate, redirects and secure cookies against that origin.
+- Set the reviewed artifact SHA-256 in the external runtime manifest. For self-hosted PostgreSQL, pin the database host, port and name in `databaseEndpoint` and use the dedicated runtime role. For hosted PostgreSQL, use the approved Session Pooler with its dedicated runtime role.
+- Use CA and hostname verification for PostgreSQL. Mount the trusted CA in web and operator directories and keep the server key in the database-only TLS mount.
+- Mount the web, operator, PostgreSQL admin and PostgreSQL TLS directories separately with the ownership and permissions above. Keep admin and migrator credentials in separate operator files. Use external Compose paths and manifest files for deployment and keep the development `.env` out of the managed runtime.
+
 Windows development may use existing DPAPI formats or private text files. DPAPI payloads **cannot be used by Linux**. Deliver independently protected Linux text secret files through an approved channel; do not copy the Windows encrypted blob and expect it to decrypt. No active production secret or DATABASE_URL was changed in this work.
+
+### Prepare candidate and rollback images
+
+Use clean, reviewed source with the pinned Node 24 Docker builder on CI or a dedicated build host. Build a candidate and select a distinct, previously verified staging build for rollback. Both images must use the reviewed patched lockfile and the current sharing policy. Rebuild and verify the rollback source with patched dependencies if the only available fallback was built before the security upgrade. The October Next.js 16.4.2 images are historical rehearsal evidence.
+
+When using `scripts/build-runtime-artifact.mjs` for standalone verification, pass it a new output directory outside the checkout so Next.js traces files relative to the isolated build tree.
+
+Record each source commit and source pin, image ID or digest, runtime manifest SHA-256 and corresponding tools image. Use `scripts/release-images.ts` to validate and seal the two reviewed image IDs to a private directory. Rehearse the sealed pair and pinned tools image against disposable data and verify that draining and rollback preserve the database ledger and sessions. Keep the pair private until publication and deployment are separately approved.
 
 ## Build and initialize a NEW isolated/staging target
 

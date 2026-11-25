@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {createHash} from 'node:crypto';
 import {getTableConfig} from 'drizzle-orm/pg-core';
+import {NEXT_VERSION} from '../runtime/secrets.mjs';
 import {studentTimetables,timetableEntries} from '../src/db/schema';
 import {releaseConfig,validateImage,verifyReleaseFiles} from '../scripts/release-images';
 import {offsiteConfig,offsiteTransfer,retrieveOffsite,receiverScript,type Transport} from '../scripts/portable/offsite';
@@ -55,10 +56,12 @@ test('ciphertext-only offsite transport recovers without source archive, preserv
 });
 test('release images require source, policy, nonroot launcher and runtime-only environment',()=>{
  const c={User:'nodeapp',WorkingDir:'/app',StopSignal:'SIGTERM',Healthcheck:{Test:['CMD','node']},Cmd:['node','runtime/launch.mjs','/run/secrets/koonpinai-runtime-manifest.json'],Env:['NODE_ENV=production']};
- const m={artifactSha256:'a'.repeat(64),buildId:'b'.repeat(64),policyVersion:'2026-10-22-student-v3',next:'16.4.2',nodeMajor:24,schemaMigrationsApplied:false};
+ const m={artifactSha256:'a'.repeat(64),buildId:'b'.repeat(64),policyVersion:'2026-10-22-student-v3',next:NEXT_VERSION,nodeMajor:24,schemaMigrationsApplied:false};
  assert.doesNotThrow(()=>validateImage(c,m,'a'.repeat(64),'b'.repeat(64)));
  for(const v of [{...c,User:'root'},{...c,Env:['DATABASE_URL=PUBLIC-fixture']},{...c,Cmd:['node','server.js']}])assert.throws(()=>validateImage(v,m,'a'.repeat(64),'b'.repeat(64)));
  for(const v of [{...m,policyVersion:'2026-10-21'},{...m,buildId:'wrong'},{...m,schemaMigrationsApplied:true}])assert.throws(()=>validateImage(c,v,'a'.repeat(64),'b'.repeat(64)));
+ assert.throws(()=>validateImage(c,{...m,next:'16.4.2'},m.artifactSha256,m.buildId),/RELEASE_ARTIFACT_MISMATCH/);
+ assert.throws(()=>validateImage(c,m,'0'.repeat(64),m.buildId),/RELEASE_ARTIFACT_MISMATCH/);
  const i={imageId:'sha256:'+'a'.repeat(64),artifactSha256:'a'.repeat(64),sourcePin:'b'.repeat(64)};
  assert.throws(()=>releaseConfig.parse({version:1,candidate:i,rollback:i,output:'/tmp/new',rollbackKind:'previous-verified-staging-build'}));
 });

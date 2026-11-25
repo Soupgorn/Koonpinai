@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {serveRuntime} from '../runtime/lifecycle.mjs';
-import {validateRuntimeUrl,validateManifest,osEnvironment,assertNoInheritedCredentials,assertRuntimeSecretDirectory} from '../runtime/secrets.mjs';
-import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {NEXT_VERSION,validateRuntimeUrl,validateManifest,osEnvironment,assertNoInheritedCredentials,assertRuntimeSecretDirectory} from '../runtime/secrets.mjs';
+import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve,basename} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -58,14 +58,29 @@ test('production secret directory rejects mixed operational files and additional
     writeFileSync(join(dir,'migration-url'),'PUBLIC fictional owner credential');assert.throws(()=>assertRuntimeSecretDirectory(file));
   }finally{assert.equal(dirname(resolve(dir)),resolve(tmpdir()));assert.ok(basename(dir).startsWith('koonpinai-secret-layout-'));rmSync(dir,{recursive:true,force:true});}
 });
-test('artifact pin detects modified code and refuses paths outside the bundle',{skip:!process.versions.node.startsWith('24.')},()=>{
+test('reviewed Next.js pin agrees with the dependency and lockfile',()=>{
+  const manifest=JSON.parse(readFileSync('package.json','utf8'));
+  const lock=JSON.parse(readFileSync('package-lock.json','utf8'));
+  assert.equal(manifest.dependencies.next,NEXT_VERSION);
+  assert.equal(lock.packages['node_modules/next'].version,NEXT_VERSION);
+  assert.equal(lock.packages['node_modules/@next/env'].version,NEXT_VERSION);
+  assert.equal(manifest.devDependencies['eslint-config-next'],NEXT_VERSION);
+  assert.equal(lock.packages['node_modules/eslint-config-next'].version,NEXT_VERSION);
+  assert.equal(lock.packages['node_modules/@next/eslint-plugin-next'].version,NEXT_VERSION);
+});
+test('artifact pin detects incorrect versions, modified code and paths outside the bundle',{skip:!process.versions.node.startsWith('24.')},()=>{
   const dir=mkdtempSync(join(tmpdir(),'koonpinai-artifact-integrity-'));
   const sha=(b:string)=>createHash('sha256').update(b).digest('hex');
   try{
     const payload=join(dir,'payload.txt');writeFileSync(payload,'PUBLIC original fixture');
-    const m={format:1,next:'16.4.2',nodeMajor:24,policyVersion:'2026-10-22-student-v3',schemaMigrationsApplied:false,files:{'payload.txt':sha('PUBLIC original fixture')}};
+    const m={format:1,next:NEXT_VERSION,nodeMajor:24,policyVersion:'2026-10-22-student-v3',schemaMigrationsApplied:false,files:{'payload.txt':sha('PUBLIC original fixture')}};
     const bytes=JSON.stringify(m);writeFileSync(join(dir,'runtime-artifact.json'),bytes);
-    assert.doesNotThrow(()=>verifyArtifact(dir,sha(bytes)));assert.throws(()=>verifyArtifact(dir,'0'.repeat(64)));
+    assert.doesNotThrow(()=>verifyArtifact(dir,sha(bytes)));
+    assert.throws(()=>verifyArtifact(dir,'0'.repeat(64)),/ARTIFACT_PIN_MISMATCH/);
+    const old=JSON.stringify({...m,next:'16.4.2'});
+    writeFileSync(join(dir,'runtime-artifact.json'),old);
+    assert.throws(()=>verifyArtifact(dir,sha(old)),/ARTIFACT_VERSION_MISMATCH/);
+    writeFileSync(join(dir,'runtime-artifact.json'),bytes);
     writeFileSync(payload,'PUBLIC tampered fixture');assert.throws(()=>verifyArtifact(dir,sha(bytes)));
     const outside=JSON.stringify({...m,files:{'../outside':sha('PUBLIC fixture')}});writeFileSync(join(dir,'runtime-artifact.json'),outside);assert.throws(()=>verifyArtifact(dir,sha(outside)));
   }finally{assert.equal(dirname(resolve(dir)),resolve(tmpdir()));assert.ok(basename(dir).startsWith('koonpinai-artifact-integrity-'));rmSync(dir,{recursive:true,force:true});}

@@ -5,7 +5,7 @@ import {pipeline} from 'node:stream/promises';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {z} from 'zod';
-import {osEnvironment} from '../runtime/secrets.mjs';
+import {NEXT_VERSION,osEnvironment} from '../runtime/secrets.mjs';
 import {POLICY_VERSION} from '../src/lib/auth/domain';
 import {fileHash,outside} from './portable/crypto';
 import {assertPrivatePath,secureDirectory} from './portable/permissions';
@@ -18,7 +18,7 @@ export function validateImage(config:Record<string,unknown>,metadata:Record<stri
  const allowed=new Set(['PATH','NODE_VERSION','YARN_VERSION','NODE_ENV','NEXT_TELEMETRY_DISABLED','PORT','HOSTNAME']);
  if(config.User!=='nodeapp'||config.WorkingDir!=='/app'||config.StopSignal!=='SIGTERM'||!config.Healthcheck||JSON.stringify(config.Cmd)!==JSON.stringify(['node','runtime/launch.mjs','/run/secrets/koonpinai-runtime-manifest.json']))throw Error('RELEASE_RUNTIME_CONFIGURATION_MISMATCH');
  if(!Array.isArray(config.Env)||config.Env.some((s:string)=>!allowed.has(s.split('=')[0])))throw Error('UNEXPECTED_IMAGE_ENVIRONMENT');
- if(metadata.artifactSha256!==expected||metadata.buildId!==sourcePin||metadata.policyVersion!==POLICY_VERSION||metadata.next!=='16.4.2'||metadata.nodeMajor!==24||metadata.schemaMigrationsApplied!==false)throw Error('RELEASE_ARTIFACT_MISMATCH');
+ if(metadata.artifactSha256!==expected||metadata.buildId!==sourcePin||metadata.policyVersion!==POLICY_VERSION||metadata.next!==NEXT_VERSION||metadata.nodeMajor!==24||metadata.schemaMigrationsApplied!==false)throw Error('RELEASE_ARTIFACT_MISMATCH');
 }
 async function docker(args:string[]){return new Promise<string>((ok,fail)=>{
  const p=spawn('docker',args,{env:{...osEnvironment(),NODE_ENV:'production'},stdio:['ignore','pipe','pipe']});let out='';const timer=setTimeout(()=>{p.kill();fail(Error('RELEASE_DOCKER_TIMEOUT'));},300000);
